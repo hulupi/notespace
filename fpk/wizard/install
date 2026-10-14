@@ -4,7 +4,7 @@
     "items": [
       {
         "type": "tips",
-        "helpText": "<h3>知间笔记 · NoteSpace</h3><p>在飞牛 NAS 上管理你的私人 Markdown 笔记。</p><ul><li>文件夹与笔记管理，支持 Markdown 编辑、预览和自动保存</li><li>附件保存在 NAS，可创建限时私密分享</li><li>支持收藏、回收站、版本历史和阅读密码</li><li>数据由你自己的 NAS 保存，不依赖第三方云盘</li></ul>"
+        "helpText": "<h3>知间笔记 · NoteSpace</h3> <p><strong>知间笔记（NoteSpace）</strong> 是一款专为飞牛 NAS 打造的轻量化、私有化 Markdown 笔记管理应用，致力于为用户提供安全、简洁、高效的个人知识管理空间。</p> <p><strong>所有数据均保存在用户自己的飞牛 NAS 设备中，无需依赖任何外部云服务或第三方服务器。</strong> 笔记正文、图片、附件、账号信息、分享配置及历史版本等数据均在本地存储和管理，真正实现数据自主掌控，保护个人隐私。</p> <p>应用采用简洁直观的三栏布局，支持多级文件夹管理、Markdown 实时编辑、自动保存、笔记收藏、访问加锁、只读分享、历史版本管理及完整数据备份，让知识整理与内容创作更加轻松高效。</p> <p ><strong>核心特色：</strong></p> <ul> <li><strong>完全本地化：</strong> 所有笔记、附件及应用数据均存储于飞牛 NAS，不依赖外部云端服务。</li> <li><strong>隐私与安全：</strong> 数据由用户自主掌控，支持笔记加锁、密码保护及只读分享。</li> <li><strong>Markdown 编辑：</strong> 支持标准 Markdown 语法，所见即所得，正文以 <code>.md</code> 文件保存，方便迁移和长期保存。</li> <li><strong>高效管理：</strong> 多级文件夹、笔记收藏、自动保存及历史版本记录，让知识井然有序。</li> <li><strong>便捷分享：</strong> 支持只读分享、访问密码及有效期设置，分享权限自主可控。</li> <li><strong>完整备份：</strong> 支持笔记、附件及相关配置数据备份，降低数据丢失风险。</li> </ul> <p><strong>技术架构：</strong></p> <p>前端基于 Vue 3、Element Plus 和 md-editor-v3 构建，后端采用 Node.js + SQLite。笔记正文以标准 <code>.md</code> 文件存储，附件保存在 NAS 本地目录，SQLite 负责管理账号、分享权限、收藏、锁定状态及版本记录等元数据。</p> <p><strong>无需注册第三方账号，无需连接外部云平台，无需额外部署数据库，安装到飞牛 NAS 即可使用。</strong></p> <p><em>让知识留在身边，让数据真正属于自己。</em></p>"
       }
     ]
   },
