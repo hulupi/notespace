@@ -132,6 +132,9 @@ normalizeShellScript(path.join(fpk, "app", "check-data-directory"));
 const fnpack = process.env.FNPACK || "fnpack";
 const manifest = fsSync.readFileSync(path.join(fpk, "manifest"), "utf8");
 const appName = manifest.match(/^appname\s*=\s*(\S+)/m)?.[1];
+const version = manifest.match(/^version\s*=\s*(\S+)/m)?.[1];
+if (!/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(version || ""))
+  throw new Error("fpk/manifest 中的版本号无效，请使用例如 1.2.1 的格式。");
 const launchName = manifest.match(/^desktop_applaunchname\s*=\s*(\S+)/m)?.[1];
 const entry = JSON.parse(fsSync.readFileSync(path.join(fpk, "app", "ui", "config"), "utf8"))[".url"]?.[launchName];
 if (appName !== "node-space" || entry?.gatewayPrefix !== `/app/${appName}` || entry?.gatewaySocket !== "app.sock")
@@ -143,4 +146,7 @@ run(fnpack, ["build"], { cwd: fpk });
 const packed = await fs.stat(artifact).catch(() => null);
 if (!packed?.size) throw new Error("fnpack 没有生成 fpk/node-space.fpk，请检查 fnpack 输出中的错误信息。");
 repairFpkPermissions(artifact);
-console.log(`FPK 构建完成：${artifact}\n应用通过 fnOS 统一网关 /app/node-space 和 Unix Socket 访问，无需暴露服务端口。`);
+const versionedArtifact = path.join(fpk, `${appName}-${version}.fpk`);
+await fs.rm(versionedArtifact, { force: true });
+await fs.rename(artifact, versionedArtifact);
+console.log(`FPK 构建完成：${versionedArtifact}\n应用通过 fnOS 统一网关 /app/node-space 和 Unix Socket 访问，无需暴露服务端口。`);

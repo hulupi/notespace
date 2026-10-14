@@ -6,6 +6,18 @@ NoteSpace 是一款面向飞牛 NAS 的私人 Markdown 笔记管理应用。笔�
 
 产品采用三栏布局：左侧导航与文件夹，中间笔记列表，右侧编辑与阅读。前端使用 Vue 3、Element Plus 和 md-editor-v3，后端使用 Node.js 与 SQLite。正文以标准 `.md` 文件保存，账号、分享、收藏、锁定标记和版本记录等由 SQLite 管理。
 
+## 项目说明
+
+本项目全程由 Codex AI 生成。如有侵权或其他不恰当的地方，请通过本仓库的 [Issues](https://github.com/hulupi/notespace/issues) 联系本人删除，谢谢！
+
+## 界面截图
+
+![笔记编辑界面](docs/screenshots/workspace.png)
+
+![深色模式](docs/screenshots/dark-mode.png)
+![笔记分享设置界面](docs/screenshots/share-set.png)
+![笔记分享界面](docs/screenshots/share.png)
+
 ## 已实现的功能
 
 ### 笔记与文件夹
@@ -68,7 +80,7 @@ NoteSpace 是一款面向飞牛 NAS 的私人 Markdown 笔记管理应用。笔�
 
 安装包声明的最低系统版本为 fnOS **1.1.3100**，依赖应用中心的 **nodejs_v22**。
 
-1. 准备由当前源码生成的 `node-space.fpk`，在飞牛应用中心通过手动安装导入。
+1. 准备由当前源码生成的 `node-space-<版本号>.fpk`，在飞牛应用中心通过手动安装导入。
 2. 按安装引导阅读功能介绍，并填写可选的数据保存目录，例如 `/vol1/1000/NoteSpace`。
 3. 未填写时，使用系统分配的应用持久化目录 `TRIM_PKGVAR/data`。
 4. 自定义目录需要应用账号的读写和上级路径访问权限。若启动提示权限不足，在飞牛应用设置中授予对应目录读写权限，包含子文件夹和文件。
@@ -125,9 +137,15 @@ NOTESPACE_DATA_DIR=/path/to/NoteSpace npm start
 npm run pack
 ```
 
-输出为 `fpk/node-space.fpk`。脚本构建前端、复制后端和静态资源，并处理安装脚本换行与执行权限。Node.js 由飞牛的 `nodejs_v22` 依赖提供，无需设置 `NOTESPACE_NODE_RUNTIME`，也无需把 Windows 的 `node.exe` 放入安装包。
+输出文件名自动读取 `fpk/manifest` 中的 `version`，例如 `version = 1.2.1` 时生成 `fpk/node-space-1.2.1.fpk`。脚本构建前端、复制后端和静态资源，并处理安装脚本换行与执行权限。同版本再次打包会替换对应文件，其它版本的安装包保留。Node.js 由飞牛的 `nodejs_v22` 依赖提供，无需设置 `NOTESPACE_NODE_RUNTIME`，也无需把 Windows 的 `node.exe` 放入安装包。
 
 若 `fnpack` 未加入 PATH，可通过 `FNPACK` 环境变量指定其可执行文件路径。源码修改不会自动更新已有 FPK，安装新代码需要重新构建安装包。
+
+### 发布到 GitHub Releases
+
+先修改 `fpk/manifest` 的版本号，提交并推送对应源码，再执行 `npm run pack`。在 GitHub 仓库的 Releases 中创建新发布，选择该源码提交或对应的 `main` 分支，创建例如 `v1.2.1` 的标签，填写版本标题和更新说明，将 `fpk/node-space-1.2.1.fpk` 拖到附件上传区，等待上传完成后发布。
+
+安装包作为 Release 附件上传即可，不需要修改 `.gitignore` 或提交二进制文件。版本号、标签和附件名称应保持对应，打包期间不要继续修改待发布源码。官方操作说明见 [GitHub Releases 文档](https://docs.github.com/en/repositories/releasing-projects-on-github/managing-releases-in-a-repository)。
 
 ## 使用说明
 

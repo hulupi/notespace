@@ -2,6 +2,8 @@
 
 FPK 依赖飞牛应用中心提供的 `nodejs_v22`，不在安装包内重复打包 Node.js。使用 `npm run pack` 构建时需要安装飞牛官方 `fnpack`。
 
+输出文件名包含 manifest 中的版本号，例如 `version = 1.2.1` 时生成 `fpk/node-space-1.2.1.fpk`。同版本打包会替换已有文件，其它版本保留。发布时可将此文件作为 GitHub Releases 附件上传，不需要提交到 Git 源码仓库。
+
 安装向导可选填写数据目录。留空时使用 fnOS 为应用分配的持久化目录 `TRIM_PKGVAR/data`；自定义时填入 NAS 绝对路径。生命周期脚本以 root 准备目录，Node 服务通过 run-as-user 切换到 node-space 应用账号运行。fnOS 1.1 配置 POSIX ACL 与上级路径遍历权限；fnOS 1.2+ 自定义目录使用系统设置中的文件夹读写授权（含子文件夹和文件）。授权检查使用应用账号实际创建、读写、重命名和删除临时文件，不依赖 -w 的判断结果。
 
 若选择的目录无法创建或写入，启动日志会提示为该目录授权读写。目录初始化日志位于 `TRIM_PKGVAR/directory-setup.log`，运行日志位于 `TRIM_PKGVAR/node-space.log`，均可通过 `/var/apps/node-space/var/` 软链查看。未授权的目录会保留 pending 状态，安装可以完成；不会自动改用其他目录保存笔记。
