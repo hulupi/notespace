@@ -105,6 +105,7 @@ await fs.cp(path.join(root, "backend"), serverDir, {
   filter: source => !source.endsWith(".test.mjs"),
 });
 await fs.cp(path.join(root, "dist"), publicDir, { recursive: true });
+await fs.copyFile(path.join(root, "docs", "nginx", "notespace-public.conf"), path.join(fpk, "app", "notespace-public.conf"));
 await fs.rm(path.join(fpk, "app", "runtime"), { recursive: true, force: true });
 
 // Use the project's supplied icons; never regenerate or overwrite the logo.

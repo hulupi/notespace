@@ -7,6 +7,8 @@ CMD_DIR="$(cd -- "$(dirname -- "$0")" && pwd)"
 SETTINGS_DIR="${TRIM_PKGETC:-$VAR}"
 PID="$VAR/node-space.pid"
 SOCKET="$APP/app.sock"
+PUBLIC_SOCKET_DIR="/run/node-space-share"
+PUBLIC_SOCKET="$PUBLIC_SOCKET_DIR/app.sock"
 NODE="/var/apps/nodejs_v22/target/bin/node"
 LOG="$VAR/node-space.log"
 export PATH="/var/apps/nodejs_v22/target/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
@@ -30,10 +32,10 @@ stop_app() {
   while kill -0 "$process_id" 2>/dev/null && [ "$count" -lt 10 ]; do sleep 1; count=$((count + 1)); done
   if kill -0 "$process_id" 2>/dev/null; then kill -KILL "$process_id" 2>/dev/null || true; fi
  fi
- rm -f -- "$PID" "$SOCKET"
+ rm -f -- "$PID" "$SOCKET" "$PUBLIC_SOCKET"
 }
 start_app() {
- if running && [ -S "$SOCKET" ]; then return 0; fi
+ if running && [ -S "$SOCKET" ] && [ -S "$PUBLIC_SOCKET" ]; then return 0; fi
  if running; then stop_app; fi
  mkdir -p -- "$VAR"
  DATA_DIR=""
@@ -53,9 +55,16 @@ start_app() {
  export NOTESPACE_REQUIRE_NAS_USER="1"
  export NOTESPACE_HEALTH_TOKEN="$("$NODE" -p 'require("node:crypto").randomBytes(32).toString("hex")')"
  export NOTESPACE_SOCKET_PATH="$SOCKET"
+ [ ! -L "$PUBLIC_SOCKET_DIR" ] || { error '分享 Socket 目录不能是软链接。'; return 1; }
+ mkdir -p -- "$PUBLIC_SOCKET_DIR"
+ chown "node-space:$(id -gn node-space)" "$PUBLIC_SOCKET_DIR"
+ chmod 0711 "$PUBLIC_SOCKET_DIR"
+ local nginx_group
+ nginx_group="$(id -gn www-data)" || { error '找不到 Nginx 用户 www-data。'; return 1; }
+ export NOTESPACE_PUBLIC_SOCKET_PATH="$PUBLIC_SOCKET"
  export NOTESPACE_DATA_DIR="$DATA_DIR"
  export NOTESPACE_PUBLIC_DIR="$APP/public"
- rm -f -- "$SOCKET"
+ rm -f -- "$SOCKET" "$PUBLIC_SOCKET"
  printf '\nStarting NoteSpace; directory: %s\n' "$DATA_DIR" >> "$LOG"
  cd /
  nohup /bin/bash "$CMD_DIR/run-as-user" "$NODE" "$APP/server/server.mjs" >> "$LOG" 2>&1 &
@@ -63,7 +72,11 @@ start_app() {
  local count=0
  while [ "$count" -lt 15 ]; do
   running || break
-  if [ -S "$SOCKET" ] && "$NODE" -e 'const http=require("node:http");const r=http.get({socketPath:process.argv[1],path:"/app/node-space/health",headers:{"X-NoteSpace-Health":process.env.NOTESPACE_HEALTH_TOKEN}},s=>{s.resume();s.on("end",()=>process.exit(s.statusCode===200?0:1))});r.on("error",()=>process.exit(1));r.setTimeout(1000,()=>{r.destroy();process.exit(1)})' "$SOCKET" >/dev/null 2>&1; then return 0; fi
+  if [ -S "$PUBLIC_SOCKET" ]; then
+   chgrp "$nginx_group" "$PUBLIC_SOCKET"
+   chmod 0660 "$PUBLIC_SOCKET"
+  fi
+  if [ -S "$SOCKET" ] && [ -S "$PUBLIC_SOCKET" ] && "$NODE" -e 'const http=require("node:http");const r=http.get({socketPath:process.argv[1],path:"/app/node-space/health",headers:{"X-NoteSpace-Health":process.env.NOTESPACE_HEALTH_TOKEN}},s=>{s.resume();s.on("end",()=>process.exit(s.statusCode===200?0:1))});r.on("error",()=>process.exit(1));r.setTimeout(1000,()=>{r.destroy();process.exit(1)})' "$SOCKET" >/dev/null 2>&1; then return 0; fi
   sleep 1
   count=$((count + 1))
  done
@@ -73,6 +86,6 @@ start_app() {
 case "${1:-}" in
  start) start_app ;;
  stop) stop_app ;;
- status) running && [ -S "$SOCKET" ] && exit 0 || exit 3 ;;
+ status) running && [ -S "$SOCKET" ] && [ -S "$PUBLIC_SOCKET" ] && exit 0 || exit 3 ;;
  *) exit 1 ;;
 esac

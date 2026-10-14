@@ -78,6 +78,9 @@ const publicDir = path.resolve(
 );
 const basePath = (process.env.NOTESPACE_BASE_PATH || "").replace(/\/+$/, "");
 const socketPath = process.env.NOTESPACE_SOCKET_PATH || "";
+const publicSocketPath = process.env.NOTESPACE_PUBLIC_SOCKET_PATH || "";
+if (publicSocketPath && (!socketPath || publicSocketPath === socketPath))
+  throw Error("分享 Socket 必须与飞牛管理 Socket 分开配置");
 if ((process.env.NOTESPACE_REQUIRE_NAS_USER === "1" || process.env.TRIM_APPDEST) && !socketPath)
   throw Error("飞牛部署必须配置 NOTESPACE_SOCKET_PATH，禁止回退到本地 TCP 调试模式");
 const workspaces = new Workspaces(dataRoot, !!socketPath);
@@ -119,13 +122,20 @@ function limited(req, bucket = "login", limit = 15) {
     for (const [key, value] of attempts)
       if (value.until < now) attempts.delete(key);
 }
-async function handle(req, res) {
+async function handle(req, res, publicOnly = false) {
   const url = new URL(req.url, "http://localhost");
   let route = url.pathname;
   if (basePath) {
     if (route !== basePath && !route.startsWith(basePath + "/"))
       return json(res, 404, { error: "页面不存在" });
     route = route.slice(basePath.length) || "/";
+  }
+  if (publicOnly) {
+    const allowed = /^\/s\/[a-f0-9]{48}\/?$/.test(route) || isPublicShareRoute(route) || /^\/assets\/[A-Za-z0-9_.-]+$/.test(route);
+    if (!allowed) return json(res, 404, { error: "分享入口不提供此功能" });
+    if (req.method !== "GET") return json(res, 405, { error: "分享入口仅允许只读访问" });
+    for (const name of Object.keys(req.headers))
+      if (name.startsWith("x-trim-") || ["cookie", "authorization", "x-notespace-health"].includes(name)) delete req.headers[name];
   }
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("Referrer-Policy", "no-referrer");
@@ -562,10 +572,11 @@ function mime(name) {
     }[path.extname(name)] || "application/octet-stream"
   );
 }
-const server = http.createServer((req, res) => {
+function createServer(publicOnly = false) {
+  return http.createServer((req, res) => {
   const run = () =>
     Promise.resolve(initialization)
-      .then(() => handle(req, res))
+      .then(() => handle(req, res, publicOnly))
       .catch((e) => {
         if (!res.headersSent)
           json(res, e.status || (e.code === "ENOENT" ? 404 : 400), {
@@ -577,7 +588,16 @@ const server = http.createServer((req, res) => {
         else res.end();
       });
   queue = queue.then(run, run);
-});
+  });
+}
+const server = createServer();
+const publicServer = publicSocketPath ? createServer(true) : null;
+function closeServers(done) {
+  let remaining = publicServer ? 2 : 1;
+  const closed = () => { if (--remaining === 0) done(); };
+  server.close(closed);
+  publicServer?.close(closed);
+}
 server.requestTimeout = 30 * 60 * 1000;
 const port = Number(process.env.PORT || 3210);
 const host = process.env.HOST || "127.0.0.1";
@@ -596,6 +616,14 @@ const onListening = () => {
   initialization = (async () => {
     if (socketPath && process.platform !== "win32") await fs.chmod(socketPath, 0o660);
     await workspaces.initialize();
+    if (publicServer) {
+      await fs.rm(publicSocketPath, { force: true });
+      await new Promise((resolve, reject) => {
+        publicServer.once("error", reject);
+        publicServer.listen(publicSocketPath, resolve);
+      });
+      if (process.platform !== "win32") await fs.chmod(publicSocketPath, 0o660);
+    }
     const address = server.address();
     const listenTarget = socketPath || `${typeof address === "object" ? address.port : port}`;
     console.log(`NoteSpace listening on ${listenTarget}; base: ${basePath || "/"}; data: ${dataRoot}`);
@@ -603,9 +631,10 @@ const onListening = () => {
   initialization.catch((error) => {
     console.error("NoteSpace 数据初始化失败：" + error.message);
     process.exitCode = 1;
-    server.close(() => {
+    closeServers(() => {
       workspaces.close();
       if (socketPath) fs.rm(socketPath, { force: true }).catch(() => {});
+      if (publicSocketPath) fs.rm(publicSocketPath, { force: true }).catch(() => {});
     });
   });
 };
@@ -615,9 +644,10 @@ if (socketPath) {
 } else server.listen(port, host, onListening);
 for (const signal of ["SIGINT", "SIGTERM"])
   process.on(signal, () => {
-    server.close(() => {
+    closeServers(() => {
       workspaces.close();
       if (socketPath) fs.rm(socketPath, { force: true }).catch(() => {});
+      if (publicSocketPath) fs.rm(publicSocketPath, { force: true }).catch(() => {});
       process.exit(0);
     });
   });
