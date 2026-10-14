@@ -1,0 +1,74 @@
+#!/bin/bash
+set -eu
+umask 0077
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+APP_USER=node-space
+CMD_DIR="$(cd -- "$(dirname -- "$0")" && pwd)"
+SETTINGS_DIR="${TRIM_PKGETC:-${TRIM_PKGVAR}}"
+SETTINGS_FILE="$SETTINGS_DIR/data-directory"
+DIAGNOSTIC_LOG="${TRIM_PKGVAR}/directory-setup.log"
+error() {
+ printf '%s\n' "$1" >&2
+ if [ -n "${TRIM_TEMP_LOGFILE:-}" ]; then printf '%s\n' "$1" > "$TRIM_TEMP_LOGFILE"; fi
+ exit 1
+}
+[ "$(id -u)" = 0 ] || error "目录初始化需要 root 生命周期脚本，请重新安装新版 FPK。Node 服务仍以应用账号运行。"
+mkdir -p -- "$TRIM_PKGVAR" "$SETTINGS_DIR"
+SELECTED_DIR="${wizard_data_dir:-}"
+if [ -z "$SELECTED_DIR" ] && [ "${1:-install}" != install ]; then
+ if [ -f "$SETTINGS_FILE" ]; then IFS= read -r SELECTED_DIR < "$SETTINGS_FILE" || true;
+ elif [ -f "$TRIM_PKGVAR/notespace.env" ]; then IFS= read -r SELECTED_DIR < "$TRIM_PKGVAR/notespace.env" || true; fi
+fi
+SELECTED_DIR="${SELECTED_DIR:-$TRIM_PKGVAR/data}"
+case "$SELECTED_DIR" in /*) ;; *) error '数据目录必须是绝对路径。' ;; esac
+case "$SELECTED_DIR" in *$'\n'*|*$'\r'*|*:*) error '数据目录不能包含换行或冒号。' ;; esac
+NEW_DIR="$(realpath -m -- "$SELECTED_DIR")" || error '无法解析数据目录。'
+DEFAULT_DIR="$(realpath -m -- "$TRIM_PKGVAR/data")"
+if [ "$NEW_DIR" != "$DEFAULT_DIR" ]; then
+ [[ "$NEW_DIR" =~ ^/vol[0-9]+/.+ ]] || error '请选择存储空间下的独立数据文件夹。'
+ [[ ! "$NEW_DIR" =~ ^/vol[0-9]+/@ ]] || error '自定义目录不能使用应用系统目录。'
+fi
+id "$APP_USER" >> "$DIAGNOSTIC_LOG" 2>&1 || error '找不到 node-space 应用专用账号。'
+new_directory=false
+if [ ! -d "$NEW_DIR" ]; then
+ new_directory=true
+ existing_parent="$(dirname -- "$NEW_DIR")"
+ while [ ! -d "$existing_parent" ]; do existing_parent="$(dirname -- "$existing_parent")"; done
+ BACKUP_OWNER="$(stat -c '%u' -- "$existing_parent")"
+else BACKUP_OWNER="$(stat -c '%u' -- "$NEW_DIR")"; fi
+mkdir -p -- "$NEW_DIR" || error '无法创建数据目录，请检查存储空间。'
+if [ "$new_directory" = true ]; then
+ if [ "$NEW_DIR" = "$DEFAULT_DIR" ]; then chown "$APP_USER:$APP_USER" -- "$NEW_DIR";
+ else chown "$BACKUP_OWNER" -- "$NEW_DIR"; fi
+fi
+command -v setfacl >/dev/null 2>&1 || error '系统缺少 setfacl，无法配置目录访问权限。'
+SYS_MAJOR="${TRIM_SYS_VERSION_MAJOR:-1}"
+SYS_MINOR="${TRIM_SYS_VERSION_MINOR:-1}"
+[[ "$SYS_MAJOR" =~ ^[0-9]+$ && "$SYS_MINOR" =~ ^[0-9]+$ ]] || error '系统版本信息不正确。'
+if [ "$NEW_DIR" = "$DEFAULT_DIR" ] || [ "$SYS_MAJOR" -lt 1 ] || { [ "$SYS_MAJOR" -eq 1 ] && [ "$SYS_MINOR" -lt 2 ]; }; then
+ parent="$(dirname -- "$NEW_DIR")"
+ while [ "$parent" != / ]; do
+  setfacl -m "u:${APP_USER}:--x" -- "$parent" || error '无法设置数据目录上级路径的访问权限。'
+  parent="$(dirname -- "$parent")"
+ done
+ find "$NEW_DIR" -type d -exec setfacl -m "u:${APP_USER}:rwx,u:${BACKUP_OWNER}:rwx,m::rwx,d:u:${APP_USER}:rwx,d:u:${BACKUP_OWNER}:rwx,d:m::rwx" -- {} + || error '无法设置数据目录权限。'
+ find "$NEW_DIR" -type f -exec setfacl -m "u:${APP_USER}:rw-" -- {} + || error '无法设置数据文件权限。'
+else
+ printf 'fnOS 1.2+ 自定义目录使用系统应用设置中的文件夹授权。\n' >> "$DIAGNOSTIC_LOG"
+fi
+# Root helpers live in cmd/, outside the service-writable Socket directory.
+APP_TARGET="$(realpath -- "$TRIM_APPDEST")"
+find "$APP_TARGET" -type d -exec chmod 0755 -- {} +
+find "$APP_TARGET" -type f -exec chmod 0644 -- {} +
+setfacl -m "u:${APP_USER}:rwx" -- "$APP_TARGET" || error '无法授予应用创建网关 Socket 的权限。'
+printf '\nDirectory: %s\nLifecycle: %s\n' "$NEW_DIR" "$(id)" >> "$DIAGNOSTIC_LOG"
+if command -v getfacl >/dev/null 2>&1; then getfacl -p -- "$NEW_DIR" "$(dirname -- "$NEW_DIR")" >> "$DIAGNOSTIC_LOG" 2>&1 || true; fi
+probe_status=0
+(cd / && /bin/bash "$CMD_DIR/run-as-user" /bin/bash "$TRIM_APPDEST/check-data-directory" "$NEW_DIR") >> "$DIAGNOSTIC_LOG" 2>&1 || probe_status=$?
+if [ "$probe_status" = 77 ]; then
+ printf 'pending\n' > "$SETTINGS_DIR/directory-access"
+ printf '等待文件夹读写授权：%s\n' "$NEW_DIR" >> "$DIAGNOSTIC_LOG"
+elif [ "$probe_status" != 0 ]; then error "应用账号检查失败，请查看 $DIAGNOSTIC_LOG。";
+else printf 'ready\n' > "$SETTINGS_DIR/directory-access"; fi
+printf '%s\n' "$NEW_DIR" > "$SETTINGS_FILE.tmp"
+mv -f -- "$SETTINGS_FILE.tmp" "$SETTINGS_FILE"

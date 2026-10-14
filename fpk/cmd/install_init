@@ -1,0 +1,4 @@
+#!/bin/sh
+set -eu
+ # This hook runs before installation; package paths may not exist yet.
+exit 0

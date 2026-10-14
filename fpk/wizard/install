@@ -1,0 +1,23 @@
+[
+  {
+    "stepTitle": "认识知间笔记",
+    "items": [
+      {
+        "type": "tips",
+        "helpText": "<h3>知间笔记 · NoteSpace</h3><p>在飞牛 NAS 上管理你的私人 Markdown 笔记。</p><ul><li>文件夹与笔记管理，支持 Markdown 编辑、预览和自动保存</li><li>附件保存在 NAS，可创建限时私密分享</li><li>支持收藏、回收站、版本历史和阅读密码</li><li>数据由你自己的 NAS 保存，不依赖第三方云盘</li></ul>"
+      }
+    ]
+  },
+  {
+    "stepTitle": "设置数据保存位置",
+    "items": [
+      {
+        "type": "text",
+        "field": "wizard_data_dir",
+        "label": "数据目录（可选）",
+        "initValue": "",
+        "helpText": "留空使用 fnOS 为本应用分配的默认持久化目录。自定义时填写 NAS 上的绝对路径。安装后请在应用中心的知间笔记设置中，为该目录授权读写权限并重新启动应用；未授权时应用无法访问该目录。例如 /vol1/1000/NoteSpace。"
+      }
+    ]
+  }
+]

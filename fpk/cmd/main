@@ -1,0 +1,78 @@
+#!/bin/bash
+set -eu
+umask 0077
+APP="${TRIM_APPDEST:?}"
+VAR="${TRIM_PKGVAR:?}"
+CMD_DIR="$(cd -- "$(dirname -- "$0")" && pwd)"
+SETTINGS_DIR="${TRIM_PKGETC:-$VAR}"
+PID="$VAR/node-space.pid"
+SOCKET="$APP/app.sock"
+NODE="/var/apps/nodejs_v22/target/bin/node"
+LOG="$VAR/node-space.log"
+export PATH="/var/apps/nodejs_v22/target/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+error() {
+ printf '%s\n' "$1" >&2
+ printf '%s\n' "$1" >> "$LOG"
+ if [ -n "${TRIM_TEMP_LOGFILE:-}" ]; then printf '%s\n' "$1" > "$TRIM_TEMP_LOGFILE"; fi
+ return 1
+}
+running() {
+ [ -f "$PID" ] || return 1
+ local process_id
+ IFS= read -r process_id < "$PID" || true
+ [[ "${process_id:-}" =~ ^[0-9]+$ ]] && kill -0 "$process_id" 2>/dev/null
+}
+stop_app() {
+ if running; then
+  local process_id count=0
+  IFS= read -r process_id < "$PID" || true
+  kill -TERM "$process_id" 2>/dev/null || true
+  while kill -0 "$process_id" 2>/dev/null && [ "$count" -lt 10 ]; do sleep 1; count=$((count + 1)); done
+  if kill -0 "$process_id" 2>/dev/null; then kill -KILL "$process_id" 2>/dev/null || true; fi
+ fi
+ rm -f -- "$PID" "$SOCKET"
+}
+start_app() {
+ if running && [ -S "$SOCKET" ]; then return 0; fi
+ if running; then stop_app; fi
+ mkdir -p -- "$VAR"
+ DATA_DIR=""
+ if [ -f "$SETTINGS_DIR/data-directory" ]; then IFS= read -r DATA_DIR < "$SETTINGS_DIR/data-directory" || true;
+ elif [ -f "$VAR/notespace.env" ]; then IFS= read -r DATA_DIR < "$VAR/notespace.env" || true; fi
+ DATA_DIR="${DATA_DIR:-$VAR/data}"
+ if [ ! -d "$DATA_DIR" ]; then error "数据目录不存在或存储空间未挂载：$DATA_DIR。请检查安装配置。"; return 1; fi
+ local probe_status=0
+ (cd / && /bin/bash "$CMD_DIR/run-as-user" /bin/bash "$APP/check-data-directory" "$DATA_DIR") >> "$LOG" 2>&1 || probe_status=$?
+ if [ "$probe_status" = 77 ]; then
+  error "应用账号无法读写 $DATA_DIR。请到飞牛系统设置 → 应用 → 知间笔记 → 文件夹访问权限，为该目录授予读写权限（含子文件夹和文件），然后重新启动。详情：$LOG"
+  return 1
+ elif [ "$probe_status" != 0 ]; then error "应用账号检查失败，请查看 $LOG。"; return 1; fi
+ if [ ! -x "$NODE" ]; then error "找不到 Node.js 22：$NODE，请安装 nodejs_v22 依赖。"; return 1; fi
+ if ! "$NODE" -e 'require("node:sqlite")' >> "$LOG" 2>&1; then error 'Node.js 运行时不支持 node:sqlite，请更新 Node.js 22 依赖。'; return 1; fi
+ export NOTESPACE_BASE_PATH="/app/node-space"
+ export NOTESPACE_REQUIRE_NAS_USER="1"
+ export NOTESPACE_HEALTH_TOKEN="$("$NODE" -p 'require("node:crypto").randomBytes(32).toString("hex")')"
+ export NOTESPACE_SOCKET_PATH="$SOCKET"
+ export NOTESPACE_DATA_DIR="$DATA_DIR"
+ export NOTESPACE_PUBLIC_DIR="$APP/public"
+ rm -f -- "$SOCKET"
+ printf '\nStarting NoteSpace; directory: %s\n' "$DATA_DIR" >> "$LOG"
+ cd /
+ nohup /bin/bash "$CMD_DIR/run-as-user" "$NODE" "$APP/server/server.mjs" >> "$LOG" 2>&1 &
+ echo "$!" > "$PID"
+ local count=0
+ while [ "$count" -lt 15 ]; do
+  running || break
+  if [ -S "$SOCKET" ] && "$NODE" -e 'const http=require("node:http");const r=http.get({socketPath:process.argv[1],path:"/app/node-space/health",headers:{"X-NoteSpace-Health":process.env.NOTESPACE_HEALTH_TOKEN}},s=>{s.resume();s.on("end",()=>process.exit(s.statusCode===200?0:1))});r.on("error",()=>process.exit(1));r.setTimeout(1000,()=>{r.destroy();process.exit(1)})' "$SOCKET" >/dev/null 2>&1; then return 0; fi
+  sleep 1
+  count=$((count + 1))
+ done
+ stop_app
+ error "知间笔记启动失败，请查看 $LOG 中的具体错误。"
+}
+case "${1:-}" in
+ start) start_app ;;
+ stop) stop_app ;;
+ status) running && [ -S "$SOCKET" ] && exit 0 || exit 3 ;;
+ *) exit 1 ;;
+esac

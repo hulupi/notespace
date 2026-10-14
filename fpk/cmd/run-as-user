@@ -1,0 +1,12 @@
+#!/bin/bash
+set -eu
+APP_USER=node-space
+APP_UID="$(id -u "$APP_USER")"
+[ "$APP_UID" != 0 ] || { echo '拒绝以 root 账号运行笔记服务。' >&2; exit 1; }
+if [ "$(id -u)" = "$APP_UID" ]; then exec "$@"; fi
+if command -v runuser >/dev/null 2>&1; then exec runuser -u "$APP_USER" -- "$@"; fi
+if command -v setpriv >/dev/null 2>&1; then
+ exec setpriv --reuid "$APP_UID" --regid "$(id -g "$APP_USER")" --init-groups "$@"
+fi
+echo '缺少 runuser 或 setpriv，无法切换到应用账号。' >&2
+exit 1

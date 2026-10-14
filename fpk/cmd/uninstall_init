@@ -1,0 +1,4 @@
+#!/bin/sh
+set -eu
+# Keep TRIM_PKGVAR data when removing the application package.
+exit 0

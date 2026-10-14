@@ -1,0 +1,14 @@
+{
+    ".url": {
+        "node-space.Application": {
+            "title": "知间笔记",
+            "icon": "images/v-bc2896833194/icon_{0}.png",
+            "type": "url",
+            "protocol": "",
+            "gatewaySocket": "app.sock",
+            "gatewayPrefix": "/app/node-space",
+            "url": "/app/node-space",
+            "allUsers": true
+        }
+    }
+}

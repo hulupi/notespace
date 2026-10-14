@@ -1,0 +1,12 @@
+node_modules/
+node_modules/.cache/notespace-runtime/
+dist/*
+!dist/.gitkeep
+data/
+.qa-data/
+fpk/app/server/
+fpk/app/public/
+fpk/app/runtime/
+*.fpk
+*.log
+.env

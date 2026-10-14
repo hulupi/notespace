@@ -1,0 +1,13 @@
+#!/bin/bash
+# Exit 77 indicates that filesystem access needs to be granted.
+set -eu
+id
+if ! cd -- "$1"; then echo '无法进入数据目录。' >&2; exit 77; fi
+if ! probe="$(mktemp .notespace-write-test.XXXXXX)"; then exit 77; fi
+trap 'rm -f -- "$probe"' EXIT
+if ! printf 'NoteSpace' > "$probe"; then exit 77; fi
+if ! content="$(cat "$probe")" || [ "$content" != NoteSpace ]; then exit 77; fi
+if ! mv -- "$probe" "$probe.renamed"; then exit 77; fi
+probe="$probe.renamed"
+if ! rm -f -- "$probe"; then exit 77; fi
+trap - EXIT
